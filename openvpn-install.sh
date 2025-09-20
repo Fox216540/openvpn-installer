@@ -530,13 +530,14 @@ else
       cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
           # CRL is read with each client connection, when OpenVPN is dropped to nobody
       chown nobody:"$group_name" /etc/openvpn/server/crl.pem
-      (
-      echo "kill $client"
-      while read -r line; do
-            [[ "$line" == *"SUCCESS"* ]] && break
-      done
-      echo "exit"
-      ) | timeout 5 telnet 127.0.0.1 7505
+      expect <<EOF
+spawn telnet 127.0.0.1 7505
+expect ">"
+send "kill $client\r"
+expect "SUCCESS"
+send "exit\r"
+expect eof
+EOF
       echo
       echo "$client revoked!"
       exit
