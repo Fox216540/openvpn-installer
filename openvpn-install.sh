@@ -532,6 +532,9 @@ else
       chown nobody:"$group_name" /etc/openvpn/server/crl.pem
       (
       echo "kill $client"
+      while read -r line; do
+            [[ "$line" == *"SUCCESS"* ]] && break
+      done
       echo "exit"
       ) | timeout 5 telnet 127.0.0.1 7505
       echo
