@@ -518,23 +518,25 @@ else
 		2)
 			client="${CLIENT_NAME:-}"
 			if [[ -z "$client" ]]; then
-        cd /etc/openvpn/server/easy-rsa/
-        ./easyrsa --batch revoke "$client"
-        ./easyrsa --batch --days=3650 gen-crl
-        rm -f /etc/openvpn/server/crl.pem
-        rm -f /etc/openvpn/server/easy-rsa/pki/reqs/"$client".req
-        rm -f /etc/openvpn/server/easy-rsa/pki/private/"$client".key
-        cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
-          # CRL is read with each client connection, when OpenVPN is dropped to nobody
-        chown nobody:"$group_name" /etc/openvpn/server/crl.pem
-        (
-        echo "kill $client"
-        echo "exit"
-        ) | timeout 5 telnet 127.0.0.1 7505
-        echo
-        echo "$client revoked!"
-        exit
+          read -p "Enter client name to revoke: " client
       fi
+
+      cd /etc/openvpn/server/easy-rsa/
+      ./easyrsa --batch revoke "$client"
+      ./easyrsa --batch --days=3650 gen-crl
+      rm -f /etc/openvpn/server/crl.pem
+      rm -f /etc/openvpn/server/easy-rsa/pki/reqs/"$client".req
+      rm -f /etc/openvpn/server/easy-rsa/pki/private/"$client".key
+      cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
+          # CRL is read with each client connection, when OpenVPN is dropped to nobody
+      chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+      (
+      echo "kill $client"
+      echo "exit"
+      ) | timeout 5 telnet 127.0.0.1 7505
+      echo
+      echo "$client revoked!"
+      exit
     ;;
 		3)
 			echo
