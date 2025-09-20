@@ -537,7 +537,7 @@ else
       echo
       echo "$client revoked!"
       exit
-    ;;
+		;;
 		3)
 			echo
 			read -p "Confirm OpenVPN removal? [y/N]: " remove
