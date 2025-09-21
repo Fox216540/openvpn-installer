@@ -368,6 +368,7 @@ management 127.0.0.1 7505" > /etc/openvpn/server/server.conf
 		;;
 	esac
 	echo 'push "block-outside-dns"' >> /etc/openvpn/server/server.conf
+	conn_inter="${CONNECTIONS_INTERVAL_SH:-10}"
 	echo "keepalive 10 120
 user nobody
 group $group_name
@@ -375,7 +376,7 @@ persist-key
 persist-tun
 verb 3
 crl-verify crl.pem
-status /run/openvpn-server/status-server.log 10" >> /etc/openvpn/server/server.conf
+status /run/openvpn-server/status-server.log $conn_inter" >> /etc/openvpn/server/server.conf
 	if [[ "$protocol" = "udp" ]]; then
 		echo "explicit-exit-notify" >> /etc/openvpn/server/server.conf
 	fi
