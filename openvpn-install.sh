@@ -497,25 +497,31 @@ else
 	case "$option" in
 		1)
       client="${CLIENT_NAME:-}"
-      if [[ -z "$client" ]];then
+
+      if [[ -z "$client" ]]; then
         echo
         echo "Provide a name for the client:"
         read -p "Name: " unsanitized_client
-        client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
+        client=$(sed 's/[^0-9a-zA-Z_-]/_/g' <<< "$unsanitized_client")
+
         while [[ -z "$client" || -e /etc/openvpn/server/easy-rsa/pki/issued/"$client".crt ]]; do
           echo "$client: invalid name."
           read -p "Name: " unsanitized_client
-          client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
+          client=$(sed 's/[^0-9a-zA-Z_-]/_/g' <<< "$unsanitized_client")
         done
       fi
 
-			cd /etc/openvpn/server/easy-rsa/
-			./easyrsa --batch --days=3650 build-client-full "$client" nopass
-			# Build the $client.ovpn file, stripping comments from easy-rsa in the process
-			grep -vh '^#' /etc/openvpn/server/client-common.txt /etc/openvpn/server/easy-rsa/pki/inline/private/"$client".inline > "$script_dir"/"$client".ovpn
-			echo
-			echo "$client added. Configuration available in:" "$script_dir"/"$client.ovpn"
-			exit
+      cd /etc/openvpn/server/easy-rsa/
+
+      ./easyrsa --batch --days=3650 build-client-full "$client" nopass --use-algo=ec
+
+      cat /etc/openvpn/server/client-common.txt \
+          /etc/openvpn/server/easy-rsa/pki/inline/private/"$client".inline \
+          > "$script_dir/$client.ovpn"
+
+      echo
+      echo "$client added. Configuration available in: $script_dir/$client.ovpn"
+      exit
 		;;
 		2)
 			client="${CLIENT_NAME:-}"
