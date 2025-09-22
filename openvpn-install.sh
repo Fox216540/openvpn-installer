@@ -540,12 +540,23 @@ else
       chown nobody:"$group_name" /etc/openvpn/server/crl.pem
       expect <<EOF
 spawn telnet 127.0.0.1 7505
-expect ">"
-send "kill $client\r"
-expect "SUCCESS"
-send "exit\r"
+expect {
+  ">" {
+    send "kill $client\r"
+    exp_continue
+  }
+  -re "ERROR: common name.*not found" {
+    puts "Client $client not found, exiting."
+    exit 1
+  }
+  "SUCCESS" {
+    send "exit\r"
+  }
+}
+
 expect eof
 EOF
+
       echo
       echo "$client revoked!"
       exit
