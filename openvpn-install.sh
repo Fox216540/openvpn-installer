@@ -513,7 +513,7 @@ else
 
       cd /etc/openvpn/server/easy-rsa/
 
-      ./easyrsa --batch --days=3650 build-client-full "$client" nopass --use-algo=ec
+      ./easyrsa --batch --use-algo=ec --days=3650 build-client-full "$client" nopass
 
       cat /etc/openvpn/server/client-common.txt \
           /etc/openvpn/server/easy-rsa/pki/inline/private/"$client".inline \
