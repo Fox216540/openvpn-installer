@@ -524,21 +524,69 @@ else
       exit
 		;;
 		2)
-			client="${CLIENT_NAME:-}"
-			if [[ -z "$client" ]]; then
-          read -p "Enter client name to revoke: " client
-      fi
+		  clients="${CLIENTS:-}"
+		  if [[ -z "$clients" ]]; then
+        client="${CLIENT_NAME:-}"
+        if [[ -z "$client" ]]; then
+            read -p "Enter client name to revoke: " client
+        fi
 
-      cd /etc/openvpn/server/easy-rsa/
-      ./easyrsa --batch revoke "$client"
-      ./easyrsa --batch --days=3650 gen-crl
-      rm -f /etc/openvpn/server/crl.pem
-      rm -f /etc/openvpn/server/easy-rsa/pki/reqs/"$client".req
-      rm -f /etc/openvpn/server/easy-rsa/pki/private/"$client".key
-      cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
-          # CRL is read with each client connection, when OpenVPN is dropped to nobody
-      chown nobody:"$group_name" /etc/openvpn/server/crl.pem
-      expect <<EOF
+        cd /etc/openvpn/server/easy-rsa/
+        ./easyrsa --batch revoke "$client"
+        ./easyrsa --batch --days=3650 gen-crl
+        rm -f /etc/openvpn/server/crl.pem
+        rm -f /etc/openvpn/server/easy-rsa/pki/reqs/"$client".req
+        rm -f /etc/openvpn/server/easy-rsa/pki/private/"$client".key
+        cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
+            # CRL is read with each client connection, when OpenVPN is dropped to nobody
+        chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+        expect <<EOF
+spawn telnet 127.0.0.1 7505
+expect {
+    ">" {
+      send "kill $client\r"
+      exp_continue
+    }
+    -re "ERROR: common name.*not found" {
+      puts "Client $client not found, exiting."
+      exit 1
+    }
+    "SUCCESS" {
+      send "exit\r"
+    }
+  }
+
+expect eof
+EOF
+
+        echo
+        echo "$client revoked!"
+      else
+        PKI_DIR="/etc/openvpn/server/easy-rsa"
+        PARALLEL=4
+
+        cd "$PKI_DIR" || exit
+
+        # Функция для параллельного отзыва клиента
+        revoke_client_parallel() {
+            local client="$1"
+            local tmp_dir
+            tmp_dir=$(mktemp -d)
+
+            mkdir -p "$tmp_dir/pki"
+            cp pki/ca.crt pki/index.txt pki/serial "$tmp_dir/pki/"
+
+            pushd "$tmp_dir" > /dev/null || return
+            ../easyrsa --pki-dir="$tmp_dir/pki" --batch revoke "$client" >/dev/null 2>&1
+            popd > /dev/null
+            rm -rf "$tmp_dir"
+
+            # Удаляем локальные файлы клиента
+            rm -f "$PKI_DIR/pki/private/$client.key"
+            rm -f "$PKI_DIR/pki/reqs/$client.req"
+
+            # Telnet к management interface
+            expect <<EOF
 spawn telnet 127.0.0.1 7505
 expect {
   ">" {
@@ -553,12 +601,24 @@ expect {
     send "exit\r"
   }
 }
-
 expect eof
 EOF
+            echo "$client revoked!"
+        }
 
-      echo
-      echo "$client revoked!"
+        export -f revoke_client_parallel
+
+        # Параллельный вызов для всех клиентов
+        echo "$CLIENTS" | tr ' ' '\n' | xargs -n1 -P"$PARALLEL" -I{} bash -c 'revoke_client_parallel "$@"' _ {}
+
+        # Генерация итогового CRL один раз
+        ./easyrsa --batch --days=3650 gen-crl
+        cp pki/crl.pem /etc/openvpn/server/crl.pem
+        chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+
+        echo "CRL обновлён для всех клиентов"
+
+      fi
       exit
 		;;
 		3)
