@@ -586,7 +586,7 @@ EOF
             rm -f "$PKI_DIR/pki/reqs/$client.req"
 
             # Telnet к management interface
-            expect <<EOF
+            expect <<EOF &
 spawn telnet 127.0.0.1 7505
 expect {
   ">" {
@@ -610,6 +610,8 @@ EOF
 
         # Параллельный вызов для всех клиентов
         echo "$CLIENTS" | tr ' ' '\n' | xargs -n1 -P"$PARALLEL" -I{} bash -c 'revoke_client_parallel "$@"' _ {}
+
+        wait
 
         # Генерация итогового CRL один раз
         ./easyrsa --batch --days=3650 gen-crl
