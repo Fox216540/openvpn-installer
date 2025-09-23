@@ -588,7 +588,10 @@ EOF
         # ================== ПОДГОТОВКА ==================
         mkdir -p "$WORK_DIR"
         : > "$WORK_DIR/success_list.txt"   # создаём или обнуляем список
-        cleanup() { rm -rf "$WORK_DIR"; }
+        cleanup() {
+                      echo "ВНИМАНИЕ: каталог $WORK_DIR не удалён (отладка)"
+                      # rm -rf "$WORK_DIR"
+                  }
         trap cleanup EXIT
 
         # ================== ФУНКЦИЯ ОБРАБОТКИ КЛИЕНТА ==================
