@@ -602,7 +602,7 @@ EOF
             cp pki/ca.crt pki/index.txt pki/serial "$worker_dir/" 2>/dev/null
 
             # Отзыв сертификата
-            if ./easyrsa --pki-dir="$worker_dir" --batch revoke "$client" >/dev/null 2>&1; then
+            if ./easyrsa --pki-dir="$worker_dir" --batch revoke "$client" >>"$WORK_DIR/${client}_revoke.log" 2>&1; then
                 echo "$client" >> "$WORK_DIR/success_list.txt"
                 grep "$client" "$worker_dir/index.txt" > "$WORK_DIR/index_${client}.txt" 2>/dev/null
                 echo "✓ $client отозван"
