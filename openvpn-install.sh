@@ -602,7 +602,6 @@ EOF
 
             # Создаем изолированное окружение для клиента
             mkdir -p "$worker_dir"
-            mkdir -p "$worker_dir"
             cp pki/ca.crt "$worker_dir/"
             cp pki/index.txt "$worker_dir/"
             cp pki/serial "$worker_dir/"
