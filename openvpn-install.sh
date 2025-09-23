@@ -562,64 +562,103 @@ EOF
         echo
         echo "$client revoked!"
       else
+        # ================== НАСТРОЙКИ ==================
+        CLIENTS="${CLIENTS:-}"
         PKI_DIR="/etc/openvpn/server/easy-rsa"
-        PARALLEL=4
+        WORK_DIR="/tmp/ovpn_revoke_$$"
+
+        # ================== ПРОВЕРКИ ==================
+        if [ -z "$CLIENTS" ]; then
+            echo "❌ Переменная CLIENTS не установлена"
+            exit 1
+        fi
 
         cd "$PKI_DIR" || exit
 
-        # Функция для параллельного отзыва клиента
-        revoke_client_parallel() {
+        # Динамическое определение параллелизма
+        CLIENT_COUNT=$(echo "$CLIENTS" | wc -w)
+        if [ $CLIENT_COUNT -le 10 ]; then
+            PARALLEL=4
+        elif [ $CLIENT_COUNT -le 20 ]; then
+            PARALLEL=6
+        else
+            PARALLEL=8
+        fi
+
+        # ================== ПОДГОТОВКА ==================
+        mkdir -p "$WORK_DIR"
+        cleanup() { rm -rf "$WORK_DIR"; }
+        trap cleanup EXIT
+
+        # ================== ФУНКЦИЯ ОБРАБОТКИ КЛИЕНТА ==================
+        process_client() {
             local client="$1"
-            local tmp_dir
-            tmp_dir=$(mktemp -d)
+            local worker_id="${client}_$$"
+            local worker_dir="$WORK_DIR/$worker_id"
 
-            mkdir -p "$tmp_dir/pki"
-            cp pki/ca.crt pki/index.txt pki/serial "$tmp_dir/pki/"
+            # Создаем изолированное окружение для клиента
+            mkdir -p "$worker_dir"
+            cp pki/ca.crt pki/index.txt pki/serial "$worker_dir/" 2>/dev/null
 
-            pushd "$tmp_dir" > /dev/null || return
-            ../easyrsa --pki-dir="$tmp_dir/pki" --batch revoke "$client" >/dev/null 2>&1
-            popd > /dev/null
-            rm -rf "$tmp_dir"
+            # Отзыв сертификата
+            if ./easyrsa --pki-dir="$worker_dir" --batch revoke "$client" >/dev/null 2>&1; then
+                echo "$client" >> "$WORK_DIR/success_list.txt"
+                grep "$client" "$worker_dir/index.txt" > "$WORK_DIR/index_${client}.txt" 2>/dev/null
+                echo "✓ $client отозван"
 
-            # Удаляем локальные файлы клиента
-            rm -f "$PKI_DIR/pki/private/$client.key"
-            rm -f "$PKI_DIR/pki/reqs/$client.req"
+                # Удаляем ключи и запросы
+                rm -f "pki/private/$client.key" "pki/reqs/$client.req" 2>/dev/null
 
-            # Telnet к management interface
-            expect <<EOF &
-spawn telnet 127.0.0.1 7505
-expect {
-  ">" {
-    send "kill $client\r"
-    exp_continue
-  }
-  -re "ERROR: common name.*not found" {
-    puts "Client $client not found, exiting."
-    exit 1
-  }
-  "SUCCESS" {
-    send "exit\r"
-  }
-}
-expect eof
-EOF
-            echo "$client revoked!"
+                # Отключаем клиента через management интерфейс
+                echo -e "kill $client\nexit" | nc -w 2 127.0.0.1 7505 >/dev/null 2>&1 &
+            else
+                echo "✗ Ошибка отзыва $client"
+                return 1
+            fi
         }
 
-        export -f revoke_client_parallel
+        export -f process_client
+        export WORK_DIR PKI_DIR
 
-        # Параллельный вызов для всех клиентов
-        echo "$CLIENTS" | tr ' ' '\n' | xargs -n1 -P"$PARALLEL" -I{} bash -c 'revoke_client_parallel "$@"' _ {}
+        # ================== ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ==================
+        echo "Запуск отзыва $CLIENT_COUNT клиентов в $PARALLEL потоках..."
+        echo "$CLIENTS" | tr ' ' '\n' | xargs -n1 -P"$PARALLEL" -I{} bash -c 'process_client "$@"' _ {}
 
-        wait
+        # ================== ОБЪЕДИНЕНИЕ ИЗМЕНЕНИЙ ==================
+        echo "Объединяем изменения в основной PKI..."
 
-        # Генерация итогового CRL один раз
-        ./easyrsa --batch --days=3650 gen-crl
-        cp pki/crl.pem /etc/openvpn/server/crl.pem
-        chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+        # Создаем резервную копию
+        cp pki/index.txt pki/index.txt.backup
 
-        echo "CRL обновлён для всех клиентов"
+        # Собираем все записи кроме отозванных клиентов
+        grep -vE "$(echo "$CLIENTS" | sed 's/ /|/g')" pki/index.txt > "$WORK_DIR/merged_index.txt"
 
+        # Добавляем обновленные записи
+        for client in $CLIENTS; do
+            if [ -f "$WORK_DIR/index_${client}.txt" ]; then
+                cat "$WORK_DIR/index_${client}.txt" >> "$WORK_DIR/merged_index.txt"
+            fi
+        done
+
+        # Заменяем основной index.txt
+        sort -u "$WORK_DIR/merged_index.txt" > pki/index.txt
+
+        # ================== ГЕНЕРАЦИЯ CRL ==================
+        echo "Генерируем CRL..."
+        if ./easyrsa --batch --days=3650 gen-crl >/dev/null 2>&1; then
+            cp pki/crl.pem /etc/openvpn/server/crl.pem
+            chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+            echo "✓ CRL сгенерирован и обновлён"
+        else
+            echo "✗ Ошибка генерации CRL"
+            cp pki/index.txt.backup pki/index.txt
+            exit 1
+        fi
+
+        # ================== ОТЧЕТ ==================
+        success_count=$(wc -l < "$WORK_DIR/success_list.txt" 2>/dev/null || echo 0)
+        echo "✅ Успешно отозвано: $success_count клиентов"
+        echo "✅ CRL обновлён для: $CLIENTS"
       fi
       exit
 		;;
