@@ -611,6 +611,7 @@ EOF
             cp -r pki/reqs "$worker_dir/"
             cp -r pki/revoked "$worker_dir/"
             cp pki/openssl-easyrsa.cnf "$worker_dir/"
+            cp -r pki/certs_by_serial "$worker_dir/"
             # Отзыв сертификата
             if ./easyrsa --pki-dir="$worker_dir" --batch revoke "$client" >>"$WORK_DIR/${client}_revoke.log" 2>&1; then
                 echo "$client" >> "$WORK_DIR/success_list.txt"
