@@ -602,8 +602,15 @@ EOF
 
             # Создаем изолированное окружение для клиента
             mkdir -p "$worker_dir"
-            cp pki/ca.crt pki/index.txt pki/serial "$worker_dir/" 2>/dev/null
-
+            mkdir -p "$worker_dir"
+            cp pki/ca.crt "$worker_dir/"
+            cp pki/index.txt "$worker_dir/"
+            cp pki/serial "$worker_dir/"
+            cp -r pki/private "$worker_dir/"
+            cp -r pki/issued "$worker_dir/"
+            cp -r pki/reqs "$worker_dir/"
+            cp -r pki/revoked "$worker_dir/"
+            cp pki/openssl-easyrsa.cnf "$worker_dir/"
             # Отзыв сертификата
             if ./easyrsa --pki-dir="$worker_dir" --batch revoke "$client" >>"$WORK_DIR/${client}_revoke.log" 2>&1; then
                 echo "$client" >> "$WORK_DIR/success_list.txt"
